@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+
+    <script src="//cdn.jsdelivr.net/npm/phaser@3.51.0/dist/phaser.js"></script>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Happy Hospital</title>
+    <style>
+        html,
+        body {
+            margin: 0;
+            padding: 0;
+        }
+    </style>
+</head>
+
+<body>
+
+    <script>
+
+        var config = {
+            type: Phaser.AUTO,
+            backgroundColor: "#777",
+            scale: {
+                width: window.innerWidth,
+                height: window.innerHeight,
+            },
+            fps: {
+                target: 60,
+            },
+            parent: 'phaser-example',
+            scene: {
+                preload: preload,
+                create: create,
+                update: update
+            },
+
+            dom: {
+                createContainer: true
+            },
+            physics: {
+                default: 'arcade',
+                arcade: {
+                    gravity: { y: 0 }
+                }
+            }
+        };
+        let socket = new WebSocket("ws://localhost:8080");
+
+
+        socket.onopen = function (e) {
+            alert("[open] Connection established");
+        };
+
+
+        var game = new Phaser.Game(config);
+
+        function preload() {
+
+            this.load.baseURL = "assets/";
+            this.load.image({
+                key: "tiles",
+                url: "tilemaps/tiles/hospital.png",
+            });
+            this.load.tilemapTiledJSON("hospital", "tilemaps/json/hospital.json");
+            this.load.image("agv", "sprites/agv.png");
+            this.load.spritesheet("tiles_spr", "tilemaps/tiles/hospital.png", {
+                frameWidth: 32,
+                frameHeight: 32,
+            });
+            this.load.image("instruction", "sprites/instruction.png");
+            this.load.html("setNumAgentForm", "setNumAgents.html");
+            this.load.html("des", "des.html");
+        }
+        var timeText;
+        var harmfulTable;
+
+        function create() {
+
+            var map = this.make.tilemap({
+                key: "hospital",
+                tileHeight: 32,
+                tileWidth: 32,
+            });
+            var tileset = map.addTilesetImage("hospital", "tiles");
+            var noPathLayer = map.createLayer("nopath", tileset, 0, 0);
+            var groundLayer = map.createLayer("ground", tileset, 0, 0);
+            var roomLayer = map.createLayer("room", tileset, 0, 0);
+            var wallLayer = map.createLayer("wall", tileset, 0, 0);
+            var pathLayer = map.createLayer("path", tileset, 0, 0);
+            var doorLayer = map.createLayer("door", tileset, 0, 0);
+            var elevatorLayer = map.createLayer("elevator", tileset, 0, 0);
+            var gateLayer = map.createLayer("gate", tileset, 0, 0);
+            var bedLayer = map.createLayer("bed", tileset, 0, 0);
+
+            noPathLayer.setCollisionByProperty({ collides: true });
+            roomLayer.setCollisionByProperty({ collides: true });
+
+            var desDom = this.add.dom(1785, 600).createFromCache("des");
+            var setNumAgentsDOM = this.add.dom(1790, 220).createFromCache("setNumAgentForm");
+            var instruction = this.add.image(1810, 900, "instruction");
+            setNumAgentsDOM.addListener("click");
+            setNumAgentsDOM.on("click", function (e) {
+                if (e.target.id === "submit") {
+
+                    let input = this.getChildByName("numOfAgents");
+                    let numAgent = parseInt(input.value);
+                    socket.send("setNumAgents" + numAgent);
+                }
+            });
+
+
+            var saveButton = this.add.text(1780, 50, "Save data", {
+                backgroundColor: "#eee",
+                padding: { bottom: 5, top: 5, left: 10, right: 10 },
+                color: "#000",
+                fontSize: "24px",
+                fontStyle: "bold",
+            });
+
+            var loadButton = this.add.text(1780, 110, "Load data", {
+                backgroundColor: "#eee",
+                padding: { bottom: 5, top: 5, left: 10, right: 10 },
+                color: "#000",
+                fontSize: "24px",
+                fontStyle: "bold",
+            });
+
+            saveButton
+                .setInteractive()
+                .on("pointerdown", () => {
+                    socket.send("ClickSaveButton");
+                });
+            loadButton
+                .setInteractive()
+                .on("pointerdown", () => {
+                    const e = document.createElement("input");
+                    const reader = new FileReader();
+                    const openFile = (event) => {
+                        var input = event.target;
+                        var fileTypes = "json";
+                        if (input.files && input.files[0]) {
+                            var extension = input.files[0].name.split(".").pop().toLowerCase(),
+                                isSuccess = fileTypes.indexOf(extension) > -1;
+
+                            if (isSuccess) {
+                                reader.onload = () => {
+                                    console.log(reader.result);
+                                    socket.send("ClickLoadButton" + reader.result);
+                                    console.log("ClickLoadButton" + reader.result);
+                                };
+                                reader.readAsText(input.files[0]);
+                            } else {
+                                alert("File không đúng định dạng. Vui lòng chọn file .json!");
+                            }
+                        }
+                    };
+                    e.type = "file";
+                    e.style.display = "none";
+                    e.addEventListener("change", openFile, false);
+                    document.body.appendChild(e);
+                    e.click();
+                    document.body.removeChild(e);
+
+                });
+            instruction
+                .setInteractive()
+                .on("pointerdown", () => {
+                    window.open(
+                        "https://github.com/phamtuanhien/Project20211_HappyHospital#readme")
+                })
+            timeText = this.add.text(1780, 290, "00:00:00", {
+                color: "#D8202A",
+                fontSize: "28px",
+                fontStyle: "bold",
+            });
+
+
+
+
+            harmfulTable = this.add.text(1780, 320, "H.ness: 0",
+                {
+                    color: "#D8202A",
+                    fontSize: "28px",
+                    fontStyle: "bold",
+                }
+            );
+
+
+
+        }
+
+
+        var map = {
+            "w": false,
+            "s": false,
+            "d": false,
+            "a": false
+        };
+
+        function setMaxAgent() {
+
+        }
+        function handleWriteDeadline(data) {
+            var des = document.getElementById("des");
+            if (des) {
+                while (des.childNodes.length >= 1) {
+                    des.firstChild && des.removeChild(des.firstChild);
+                }
+
+                des.appendChild(des.ownerDocument.createTextNode(data));
+            }
+
+
+        }
+        function setHarmfullness(data) {
+            console.log(data);
+            harmfulTable.setText("H.ness:" + data.toFixed(3).replace("\.", ","));
+        }
+
+        function setTime(data) {
+            timeText.setText(data);
+        }
+        function handleClickSaveButton(jsonArray) {
+            const objJSON = JSON.stringify(jsonArray);
+            const text = objJSON;
+            const e = document.createElement("a");
+            e.setAttribute(
+                "href",
+                "data:text/plain;charset=utf-8," + text
+            );
+            e.setAttribute("download", "save.json");
+            e.style.display = "none";
+            document.body.appendChild(e);
+            e.click();
+            document.body.removeChild(e);
+            alert("Đã luu map thành công!");
+        }
+
+        function handleClickLoadButton() {
+            actors.forEach((value, key) => {
+                items.push(value);
+            })
+            texts.forEach((value, key) => {
+                items.push(value);
+            })
+            deses.forEach((value, key) => {
+                items.push(value);
+            })
+            for (var i = 0; i < items.length; i++)
+                if (items[i] != null) items[i].destroy();
+            actors.clear();
+            texts.clear();
+            deses.clear();
+            alert("Đã tải map thành công!");
+
+        }
+
+
+        const actors = new Map();
+        const texts = new Map();
+        const deses = new Map();
+        var items = [];
+
+
+
+        onkeydown = onkeyup = function (e) {
+            e = e || event; 
+            map[e.key] = e.type == 'keydown';
+
+        }
+
+
+        function update() {
+
+
+
+            var game = this;
+            if (socket.readyState == 1) {
+
+
+                socket.send(JSON.stringify(map));
+                socket.onmessage = function (event) {
+
+                    var jsonArray = JSON.parse(event.data);
+
+                    jsonArray.forEach(item => {
+
+                        if (item.ID == "Save") handleClickSaveButton(jsonArray);
+                        else if (item.ID == "Load") handleClickLoadButton();
+                        else if (item.ID == "timeTable") handleWriteDeadline(item.data);
+                        else if (item.ID == "harmfullness") setHarmfullness(item.data);
+                        else if (item.ID == "time") setTime(item.data);
+                        else if (actors.get(item.ID) == null) {
+                            if (item.isAgv == true) {
+                                actor = game.physics.add.sprite(item.X, item.Y, "agv");
+                                if (item.ID == 1) {
+                                    text = game.add.text(item.X, item.Y - 16, "AGV", { color: "#00FF00", stroke: "#000", strokeThickness: 4 });
+                                    des = game.add.text(item.endX, item.endY, "DES", { color: "#00FF00", stroke: "#000", strokeThickness: 4 });
+                                }
+                                else {
+                                    var id = item.ID.toString();
+                                    if (item.ID < 10) id = '00' + id;
+                                    else if (item.ID < 100) id = '0' + id;
+                                    text = game.add.text(item.X, item.Y - 16, id, { color: "#F00", stroke: "#000", strokeThickness: 4 });
+                                    des = game.add.text(item.endX, item.endY, "DES", { color: "#F00", stroke: "#000", strokeThickness: 4 });
+
+                                }
+                                text.setOrigin(0, 0);
+                                des.setOrigin(0, 0);
+                                texts.set(item.ID, text);
+                                deses.set(item.ID, des);
+                            }
+                            else actor = game.physics.add.sprite(item.X, item.Y, "tiles_spr", 17);
+
+                            actor.setOrigin(0, 0);
+                            actors.set(item.ID, actor);
+
+                        }
+                        else {
+                            var actor = actors.get(item.ID);
+                            if (item.active == true) {
+                                actor.setX(item.X);
+                                actor.setY(item.Y);
+                                if (item.isAgv == true) {
+                                    var text = texts.get(item.ID);
+                                    var des = deses.get(item.ID);
+                                    text.setX(item.X);
+                                    text.setY(item.Y - 16);
+                                    if (des != null && des.x == item.X && des.y == item.Y) {
+
+                                        deses.delete(item.ID);
+                                        des.destroy();
+                                    }
+                                }
+                            }
+                            else {
+                                console.log(item.ID);
+                                var text = texts.get(item.ID);
+                                if (text != null) {
+                                    texts.delete(item.ID);
+                                    text.destroy();
+                                }
+                                actors.delete(item.ID);
+                                actor.destroy();
+                            }
+                        }
+                    })
+                };
+            }
+        }
+
+    </script>
+
+</body>
+
+</html>
