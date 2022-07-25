@@ -2,7 +2,7 @@
 
 Happy Hospital - Chuyển từ mã TypeScript sang Java, cài đặt socket
 
-https://github.com/QuanBKIT1/BTL_OOP_HappyHospital.git
+
 
 # Thành viên trong nhóm
 
